@@ -1,0 +1,45 @@
+project_name: exporter-oltp-sqs-consumer
+
+env:
+  - SKIP_UPLOAD={{ if index .Env "SKIP_UPLOAD"  }}{{ .Env.SKIP_UPLOAD }}{{ else }}false{{ end }}
+
+builds:
+  - id: main
+    main: .
+    binary: bootstrap
+    flags:
+      - -trimpath
+      - -tags=netgo
+    env:
+      - CGO_ENABLED=0
+    asmflags:
+      - all=-trimpath={{.Env.GOPATH}}
+    gcflags:
+      - all=-trimpath={{.Env.GOPATH}}
+    ldflags: |
+      -s -w
+        -extldflags '-static'
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    mod_timestamp: '{{ .CommitTimestamp }}'
+
+checksum:
+  name_template: '{{ .ProjectName }}_{{ .Version }}_SHA256SUMS'
+  algorithm: sha256
+
+# Publish step
+release:
+  mode: replace
+  prerelease: auto
+
+changelog:
+  use: github
+
+archives:
+  - id: main
+    name_template: "{{ .ProjectName }}-{{.Version}}-{{.Os}}-{{.Arch}}{{ if .Arm }}v{{.Arm }}{{ end }}"
+    format: zip

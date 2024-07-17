@@ -1,3 +1,5 @@
+dist/*
+output/*
 bootstrap
 *.zip
 otel-aws-sqs-forwarder

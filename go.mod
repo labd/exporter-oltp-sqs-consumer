@@ -1,16 +1,14 @@
-module github.com/labd/exporter-trace-oltp-sqs-consumer
+module github.com/labd/exporter-oltp-sqs-consumer
 
 go 1.22.3
 
 require (
 	github.com/aws/aws-lambda-go v1.47.0
-	github.com/davecgh/go-spew v1.1.1
 	github.com/stretchr/testify v1.9.0
 	go.opentelemetry.io/collector/component v0.105.0
 	go.opentelemetry.io/collector/config/confighttp v0.105.0
 	go.opentelemetry.io/collector/config/configopaque v1.12.0
 	go.opentelemetry.io/collector/exporter v0.105.0
-	go.opentelemetry.io/collector/exporter/debugexporter v0.105.0
 	go.opentelemetry.io/collector/exporter/otlphttpexporter v0.105.0
 	go.opentelemetry.io/collector/pdata v1.12.0
 	go.opentelemetry.io/otel/metric v1.28.0
@@ -20,6 +18,7 @@ require (
 
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
