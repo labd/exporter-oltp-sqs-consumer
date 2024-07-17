@@ -44,40 +44,43 @@ func initExporters(ctx context.Context) (*Exporters, error) {
 			TracerProvider: nooptrace.NewTracerProvider(),
 		},
 	}
-	config := &otlphttpexporter.Config{
+	factory := otlphttpexporter.NewFactory()
+
+	// Initialize the traces exporter
+	tracesConfig := &otlphttpexporter.Config{
 		Encoding: "json",
 		ClientConfig: confighttp.ClientConfig{
-			Endpoint:           os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
-			Headers:            map[string]configopaque.String{},
+			Endpoint: os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+			Headers: getHeaders(
+				"OTEL_EXPORTER_OTLP_HEADERS",
+				"OTEL_EXPORTER_OTLP_TRACES_HEADERS",
+			),
 			CustomRoundTripper: NewDebugTransport,
 		},
 	}
-
-	// Parse the environment variable and add to headers map
-	envHeaders := os.Getenv("OTEL_EXPORTER_OTLP_HEADERS")
-	if envHeaders != "" {
-		parts := strings.Split(envHeaders, ",")
-		for _, part := range parts {
-			keyValue := strings.SplitN(part, "=", 2)
-			if len(keyValue) == 2 {
-				config.ClientConfig.Headers[keyValue[0]] = configopaque.String(keyValue[1])
-			}
-		}
-	}
-
-	factory := otlphttpexporter.NewFactory()
-	traceExporter, err := factory.CreateTracesExporter(ctx, settings, config)
+	traceExporter, err := factory.CreateTracesExporter(ctx, settings, tracesConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create trace exporter: %w", err)
 	}
-
-	metricsExporter, err := factory.CreateMetricsExporter(ctx, settings, config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create metric exporter: %w", err)
-	}
-
 	if err := traceExporter.Start(ctx, nil); err != nil {
 		return nil, fmt.Errorf("failed to start trace exporter: %w", err)
+	}
+
+	// Initialize the metrics exporter
+	metricsConfig := &otlphttpexporter.Config{
+		Encoding: "json",
+		ClientConfig: confighttp.ClientConfig{
+			Endpoint: os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+			Headers: getHeaders(
+				"OTEL_EXPORTER_OTLP_HEADERS",
+				"OTEL_EXPORTER_OTLP_METRICS_HEADERS",
+			),
+			CustomRoundTripper: NewDebugTransport,
+		},
+	}
+	metricsExporter, err := factory.CreateMetricsExporter(ctx, settings, metricsConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create metric exporter: %w", err)
 	}
 
 	if err := metricsExporter.Start(ctx, nil); err != nil {
@@ -91,7 +94,6 @@ func initExporters(ctx context.Context) (*Exporters, error) {
 }
 
 func handler(ctx context.Context, sqsEvent events.SQSEvent) error {
-
 	exporters, err := initExporters(ctx)
 	if err != nil {
 		panic(err)
@@ -128,6 +130,25 @@ func handler(ctx context.Context, sqsEvent events.SQSEvent) error {
 	}
 
 	return nil
+}
+
+func getHeaders(keys ...string) map[string]configopaque.String {
+	headers := make(map[string]configopaque.String)
+	headers["User-Agent"] = configopaque.String("labd/exporter-oltp-sqs-consumer")
+
+	for _, key := range keys {
+		value := os.Getenv(key)
+		if value != "" {
+			parts := strings.Split(value, ",")
+			for _, part := range parts {
+				keyValue := strings.SplitN(part, "=", 2)
+				if len(keyValue) == 2 {
+					headers[keyValue[0]] = configopaque.String(keyValue[1])
+				}
+			}
+		}
+	}
+	return headers
 }
 
 func decodeTraces(data string) (ptrace.Traces, error) {
