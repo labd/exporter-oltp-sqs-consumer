@@ -1,0 +1,10 @@
+# https://taskfile.dev
+
+version: '3'
+
+
+tasks:
+  build:
+    cmds:
+      - GOOS=linux GOARCH=arm64 go build -o bootstrap main.go
+      - rm -f otel-aws-sqs-forwarder.zip;  zip otel-aws-sqs-forwarder.zip bootstrap
