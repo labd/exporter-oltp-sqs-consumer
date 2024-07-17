@@ -1,16 +1,26 @@
 package main
 
 import (
+	"context"
 	"testing"
 
-	"github.com/aws/aws-lambda-go/events"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestDeserialize(t *testing.T) {
+func TestInitExporters(t *testing.T) {
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4318")
+	ctx := context.Background()
+	exporters, err := initExporters(ctx)
+	assert.NoError(t, err)
+	assert.NotNil(t, exporters)
+}
 
-	message := events.SQSMessage{
-		Body: `
+func TestDeserialize(t *testing.T) {
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4318")
+	ctx := context.Background()
+	exporters, err := initExporters(ctx)
+
+	data := `
 {
   "resourceSpans": [
     {
@@ -19,7 +29,7 @@ func TestDeserialize(t *testing.T) {
           {
             "key": "service.name",
             "value": {
-              "stringValue": "my-service"
+              "stringValue": "my-test-service"
             }
           },
           {
@@ -68,10 +78,61 @@ func TestDeserialize(t *testing.T) {
     }
   ]
 }
-	`,
-	}
+	`
 
-	trace, err := decodeTraceBatch(message)
+	trace, err := decodeTraces(data)
 	assert.NoError(t, err)
 	assert.NotNil(t, trace)
+
+	exporters.traces.ConsumeTraces(ctx, trace)
+}
+
+func TestMetricData(t *testing.T) {
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4318")
+	ctx := context.Background()
+	exporters, err := initExporters(ctx)
+
+	data := `
+  {
+  "resourceMetrics": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "telemetry.sdk.language",
+            "value": {
+              "stringValue": "nodejs"
+            }
+          },
+          {
+            "key": "telemetry.sdk.name",
+            "value": {
+              "stringValue": "opentelemetry"
+            }
+          },
+          {
+            "key": "telemetry.sdk.version",
+            "value": {
+              "stringValue": "1.25.0"
+            }
+          },
+          {
+            "key": "process.command",
+            "value": {
+              "stringValue": "/app/run.ts"
+            }
+          }
+        ],
+        "droppedAttributesCount": 0
+      },
+      "scopeMetrics": []
+    }
+  ]
+}`
+
+	metrics, err := decodeMetrics(data)
+	assert.NoError(t, err)
+	assert.NotNil(t, metrics)
+
+	exporters.metrics.ConsumeMetrics(ctx, metrics)
 }
