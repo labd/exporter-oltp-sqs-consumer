@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
@@ -55,7 +56,7 @@ func initExporters(ctx context.Context) (*Exporters, error) {
 				"OTEL_EXPORTER_OTLP_HEADERS",
 				"OTEL_EXPORTER_OTLP_TRACES_HEADERS",
 			),
-			CustomRoundTripper: NewDebugTransport,
+			// CustomRoundTripper: NewDebugTransport,
 		},
 	}
 	traceExporter, err := factory.CreateTracesExporter(ctx, settings, tracesConfig)
@@ -75,7 +76,7 @@ func initExporters(ctx context.Context) (*Exporters, error) {
 				"OTEL_EXPORTER_OTLP_HEADERS",
 				"OTEL_EXPORTER_OTLP_METRICS_HEADERS",
 			),
-			CustomRoundTripper: NewDebugTransport,
+			// CustomRoundTripper: NewDebugTransport,
 		},
 	}
 	metricsExporter, err := factory.CreateMetricsExporter(ctx, settings, metricsConfig)
@@ -96,38 +97,43 @@ func initExporters(ctx context.Context) (*Exporters, error) {
 func createHandler(exporters *Exporters) func(context.Context, events.SQSEvent) error {
 	return func(ctx context.Context, sqsEvent events.SQSEvent) error {
 		for _, message := range sqsEvent.Records {
-
-			item, err := parseMessage(message)
-			if err != nil {
-				return fmt.Errorf("failed to parse message: %w", err)
+			if err := processMessage(ctx, exporters, message); err != nil {
+				log.Printf("failed to process message: %v\n", err)
 			}
-
-			if item.Kind == "trace" {
-				traces, err := decodeTraces(item.Data)
-				if err != nil {
-					return fmt.Errorf("failed to decode trace batch: %w", err)
-				}
-
-				if err := exporters.traces.ConsumeTraces(ctx, traces); err != nil {
-					fmt.Printf("failed to upload trace: %v\n", err)
-				}
-			}
-
-			if item.Kind == "metric" {
-				metrics, err := decodeMetrics(item.Data)
-				if err != nil {
-					return fmt.Errorf("failed to decode metric item: %w", err)
-				}
-
-				if err := exporters.metrics.ConsumeMetrics(ctx, metrics); err != nil {
-					fmt.Printf("failed to upload metric: %v\n", err)
-				}
-			}
-
 		}
 
 		return nil
 	}
+}
+
+func processMessage(ctx context.Context, exporters *Exporters, message events.SQSMessage) error {
+	item, err := parseMessage(message)
+	if err != nil {
+		return fmt.Errorf("failed to parse message: %w", err)
+	}
+
+	if item.Kind == "trace" {
+		traces, err := decodeTraces(item.Data)
+		if err != nil {
+			return fmt.Errorf("failed to decode trace batch: %w", err)
+		}
+
+		if err := exporters.traces.ConsumeTraces(ctx, traces); err != nil {
+			return fmt.Errorf("failed to upload trace: %v\n", err)
+		}
+	}
+
+	if item.Kind == "metric" {
+		metrics, err := decodeMetrics(item.Data)
+		if err != nil {
+			return fmt.Errorf("failed to decode metric item: %w", err)
+		}
+
+		if err := exporters.metrics.ConsumeMetrics(ctx, metrics); err != nil {
+			return fmt.Errorf("failed to upload metric: %v\n", err)
+		}
+	}
+	return nil
 }
 
 func parseMessage(message events.SQSMessage) (*ExportedItem, error) {

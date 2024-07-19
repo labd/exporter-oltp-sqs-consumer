@@ -1,0 +1,3 @@
+kind: Fixed
+body: Properly handle failures in messages
+time: 2024-07-19T07:44:17.587136+02:00
