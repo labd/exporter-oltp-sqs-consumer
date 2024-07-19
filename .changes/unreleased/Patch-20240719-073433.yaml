@@ -1,3 +1,0 @@
-kind: Patch
-body: Accept base64/gzip encoded messages from queue
-time: 2024-07-19T07:34:33.061449+02:00
