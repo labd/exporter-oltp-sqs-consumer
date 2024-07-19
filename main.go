@@ -93,43 +93,56 @@ func initExporters(ctx context.Context) (*Exporters, error) {
 	}, nil
 }
 
-func handler(ctx context.Context, sqsEvent events.SQSEvent) error {
-	exporters, err := initExporters(ctx)
+func createHandler(exporters *Exporters) func(context.Context, events.SQSEvent) error {
+	return func(ctx context.Context, sqsEvent events.SQSEvent) error {
+		for _, message := range sqsEvent.Records {
+
+			item, err := parseMessage(message)
+			if err != nil {
+				return fmt.Errorf("failed to parse message: %w", err)
+			}
+
+			if item.Kind == "trace" {
+				traces, err := decodeTraces(item.Data)
+				if err != nil {
+					return fmt.Errorf("failed to decode trace batch: %w", err)
+				}
+
+				if err := exporters.traces.ConsumeTraces(ctx, traces); err != nil {
+					fmt.Printf("failed to upload trace: %v\n", err)
+				}
+			}
+
+			if item.Kind == "metric" {
+				metrics, err := decodeMetrics(item.Data)
+				if err != nil {
+					return fmt.Errorf("failed to decode metric item: %w", err)
+				}
+
+				if err := exporters.metrics.ConsumeMetrics(ctx, metrics); err != nil {
+					fmt.Printf("failed to upload metric: %v\n", err)
+				}
+			}
+
+		}
+
+		return nil
+	}
+}
+
+func parseMessage(message events.SQSMessage) (*ExportedItem, error) {
+	var item ExportedItem
+	if err := json.Unmarshal([]byte(message.Body), &item); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal message: %w\n", err)
+	}
+
+	b, err := decompressData(item.Data)
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("failed to decompress data: %w\n", err)
 	}
+	item.Data = string(b)
 
-	for _, message := range sqsEvent.Records {
-		var item ExportedItem
-		if err := json.Unmarshal([]byte(message.Body), &item); err != nil {
-			return fmt.Errorf("failed to unmarshal message: %w\n", err)
-		}
-
-		if item.Kind == "trace" {
-			traces, err := decodeTraces(item.Data)
-			if err != nil {
-				return fmt.Errorf("failed to decode trace batch: %w", err)
-			}
-
-			if err := exporters.traces.ConsumeTraces(ctx, traces); err != nil {
-				fmt.Printf("failed to upload trace: %v\n", err)
-			}
-		}
-
-		if item.Kind == "metric" {
-			metrics, err := decodeMetrics(item.Data)
-			if err != nil {
-				return fmt.Errorf("failed to decode metric item: %w", err)
-			}
-
-			if err := exporters.metrics.ConsumeMetrics(ctx, metrics); err != nil {
-				fmt.Printf("failed to upload metric: %v\n", err)
-			}
-		}
-
-	}
-
-	return nil
+	return &item, nil
 }
 
 func getHeaders(keys ...string) map[string]configopaque.String {
@@ -162,5 +175,12 @@ func decodeMetrics(data string) (pmetric.Metrics, error) {
 }
 
 func main() {
+	ctx := context.Background()
+	exporters, err := initExporters(ctx)
+	if err != nil {
+		panic(err)
+	}
+
+	handler := createHandler(exporters)
 	lambda.Start(handler)
 }

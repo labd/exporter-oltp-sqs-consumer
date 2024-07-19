@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
+	"github.com/aws/aws-lambda-go/events"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -13,6 +15,36 @@ func TestInitExporters(t *testing.T) {
 	exporters, err := initExporters(ctx)
 	assert.NoError(t, err)
 	assert.NotNil(t, exporters)
+}
+
+func TestParseMessage(t *testing.T) {
+	data := "Hello, World!"
+
+	// Compress the data
+	compressedData, err := compressData([]byte(data))
+	if err != nil {
+		t.Fatalf("Failed to compress data: %v", err)
+	}
+
+	// Create the SQS message with the compressed data
+	messageBody, err := json.Marshal(ExportedItem{Data: string(compressedData)})
+	if err != nil {
+		t.Fatalf("Failed to marshal message body: %v", err)
+	}
+	message := events.SQSMessage{
+		Body: string(messageBody),
+	}
+
+	// Parse the message
+	parsedItem, err := parseMessage(message)
+	if err != nil {
+		t.Fatalf("Failed to parse message: %v", err)
+	}
+
+	// Check the parsed data
+	if parsedItem.Data != data {
+		t.Errorf("Expected data %q, got %q", data, parsedItem.Data)
+	}
 }
 
 func TestDeserialize(t *testing.T) {
